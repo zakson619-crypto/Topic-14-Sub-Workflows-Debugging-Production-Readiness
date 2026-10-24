@@ -1,0 +1,255 @@
+{
+  "name": "Topic 14 - Self-Contained Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "cded40a4-9db2-4620-b283-3df43e5eb455",
+      "name": "Execute_Workflow_Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const o = $input.item.json;\nconst required = ['orderId', 'state', 'subtotal'];\nfor (const f of required) {\n  if (o[f] === undefined || o[f] === null || o[f] === '') {\n    throw new Error(`CONTRACT_VIOLATION: Missing required parameter '${f}'`);\n  }\n}\nif (isNaN(Number(o.subtotal)) || Number(o.subtotal) < 0) {\n  throw new Error(\"CONTRACT_VIOLATION: 'subtotal' must be a non-negative number\");\n}\nreturn { json: o };"
+      },
+      "id": "ce26b182-35ba-48cb-baae-6f78cc4e91e1",
+      "name": "Code_ValidateTaxInput",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"orderId\": $json.orderId, \"amount\": $json.grandTotal } }}",
+        "options": {}
+      },
+      "id": "c1ebfa79-f779-43df-a15b-1e9dee7f2b2c",
+      "name": "HTTP_ProcessPaymentCharge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        368,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.item.json;\nconst trig = $('Execute_Workflow_Trigger').item.json;\nreturn {\n  json: {\n    paymentStatus: \"CONFIRMED\",\n    chargeId: \"ch_sub_\" + Math.random().toString(36).substring(2, 9),\n    transactionRef: \"AUTH-\" + Math.random().toString(36).substring(2, 9).toUpperCase(),\n    orderId: trig.orderId,\n    amountCharged: trig.grandTotal,\n    processedAt: new Date().toISOString()\n  }\n};"
+      },
+      "id": "1feb3292-c568-4995-b66a-b5e2e627106f",
+      "name": "Code_FormatPaymentReceipt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        144
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0eb6ef4c-b943-4520-a5f6-d930bfd6e660",
+      "name": "Manual_Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      orderId: \"ORD-MODULAR-901\",\n      customerName: \"Acme Corporation\",\n      state: \"NY\",\n      subtotal: 1200.00\n    }\n  }\n];"
+      },
+      "id": "4eb90806-79bd-4857-9cef-43e845625f2f",
+      "name": "Code_PrepareOrderPayload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "source": "parameter",
+        "workflowJson": "{\"nodes\": [{\"parameters\": {\"inputSource\": \"passthrough\"}, \"id\": \"t001-trigger\", \"name\": \"Execute_Workflow_Trigger\", \"type\": \"n8n-nodes-base.executeWorkflowTrigger\", \"typeVersion\": 1.1, \"position\": [0, 0]}, {\"parameters\": {\"jsCode\": \"const o = $input.item.json;\\nconst required = ['orderId', 'state', 'subtotal'];\\nfor (const f of required) {\\n  if (o[f] === undefined || o[f] === null || o[f] === '') {\\n    throw new Error(`CONTRACT_VIOLATION: Missing required parameter '${f}'`);\\n  }\\n}\\nif (isNaN(Number(o.subtotal)) || Number(o.subtotal) < 0) {\\n  throw new Error(\\\"CONTRACT_VIOLATION: 'subtotal' must be a non-negative number\\\");\\n}\\nreturn { json: o };\", \"mode\": \"runOnceForEachItem\"}, \"id\": \"c001-code\", \"name\": \"Code_ValidateTaxInput\", \"type\": \"n8n-nodes-base.code\", \"typeVersion\": 2, \"position\": [220, 0]}, {\"parameters\": {\"jsCode\": \"const order = $input.item.json;\\nconst stateRates = { 'CA': 0.0825, 'NY': 0.08875, 'TX': 0.0625, 'FL': 0.0600 };\\nconst rate = stateRates[order.state] || 0.0500; // 5% default\\nconst subtotal = Number(order.subtotal || 0);\\nconst taxAmount = Number((subtotal * rate).toFixed(2));\\nconst grandTotal = Number((subtotal + taxAmount).toFixed(2));\\nreturn {\\n  json: {\\n    orderId: order.orderId,\\n    subtotal: subtotal,\\n    state: order.state,\\n    appliedTaxRate: rate,\\n    taxAmount: taxAmount,\\n    grandTotal: grandTotal,\\n    taxCalculatedAt: new Date().toISOString()\\n  }\\n};\", \"mode\": \"runOnceForEachItem\"}, \"id\": \"c002-code\", \"name\": \"Code_CalculateStateTax\", \"type\": \"n8n-nodes-base.code\", \"typeVersion\": 2, \"position\": [440, 0]}], \"connections\": {\"Execute_Workflow_Trigger\": {\"main\": [[{\"node\": \"Code_ValidateTaxInput\", \"type\": \"main\", \"index\": 0}]]}, \"Code_ValidateTaxInput\": {\"main\": [[{\"node\": \"Code_CalculateStateTax\", \"type\": \"main\", \"index\": 0}]]}}, \"pinData\": {}}",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "fbb951bc-2306-4015-b26f-c57285bc1c29",
+      "name": "Execute_TaxSubWorkflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1696,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const order = $('Code_PrepareOrderPayload').item.json;\nconst taxResult = $input.item.json;\nreturn {\n  json: {\n    ...order,\n    taxRate: taxResult.appliedTaxRate,\n    taxAmount: taxResult.taxAmount,\n    grandTotal: taxResult.grandTotal\n  }\n};"
+      },
+      "id": "095e142b-ea34-4f16-9c1a-fa40fb1a055a",
+      "name": "Code_MergeTaxTotals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "source": "parameter",
+        "workflowJson": "{\"nodes\": [{\"parameters\": {\"inputSource\": \"passthrough\"}, \"id\": \"t001-trigger\", \"name\": \"Execute_Workflow_Trigger\", \"type\": \"n8n-nodes-base.executeWorkflowTrigger\", \"typeVersion\": 1.1, \"position\": [0, 0]}, {\"parameters\": {\"method\": \"POST\", \"url\": \"https://httpbin.org/post\", \"sendBody\": true, \"contentType\": \"json\", \"specifyBody\": \"json\", \"jsonBody\": \"={{ { \\\"orderId\\\": $json.orderId, \\\"amount\\\": $json.grandTotal } }}\", \"options\": {}}, \"id\": \"h001-http\", \"name\": \"HTTP_ProcessPaymentCharge\", \"type\": \"n8n-nodes-base.httpRequest\", \"typeVersion\": 4.2, \"position\": [220, 0]}, {\"parameters\": {\"jsCode\": \"const resp = $input.item.json;\\nconst trig = $('Execute_Workflow_Trigger').item.json;\\nreturn {\\n  json: {\\n    paymentStatus: \\\"CONFIRMED\\\",\\n    chargeId: \\\"ch_sub_\\\" + Math.random().toString(36).substring(2, 9),\\n    transactionRef: \\\"AUTH-\\\" + Math.random().toString(36).substring(2, 9).toUpperCase(),\\n    orderId: trig.orderId,\\n    amountCharged: trig.grandTotal,\\n    processedAt: new Date().toISOString()\\n  }\\n};\", \"mode\": \"runOnceForEachItem\"}, \"id\": \"c003-code\", \"name\": \"Code_FormatPaymentReceipt\", \"type\": \"n8n-nodes-base.code\", \"typeVersion\": 2, \"position\": [440, 0]}], \"connections\": {\"Execute_Workflow_Trigger\": {\"main\": [[{\"node\": \"HTTP_ProcessPaymentCharge\", \"type\": \"main\", \"index\": 0}]]}, \"HTTP_ProcessPaymentCharge\": {\"main\": [[{\"node\": \"Code_FormatPaymentReceipt\", \"type\": \"main\", \"index\": 0}]]}}, \"pinData\": {}}",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "9a4c10da-aedb-46c1-8799-ee0121af876a",
+      "name": "Execute_PaymentSubWorkflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2128,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const payment = $input.item.json;\nconst order = $('Code_MergeTaxTotals').item.json;\nreturn {\n  json: {\n    orchestratorStatus: \"ORDER_ORCHESTRATION_COMPLETED\",\n    orderId: order.orderId,\n    customer: order.customerName,\n    grandTotalPaid: order.grandTotal,\n    chargeId: payment.chargeId,\n    authCode: payment.transactionRef,\n    executedSubWorkflows: [\n      \"Sub-Workflow 1: Tax Engine\",\n      \"Sub-Workflow 2: Payment Gateway\"\n    ],\n    completedAt: new Date().toISOString()\n  }\n};"
+      },
+      "id": "06e88204-dc80-4355-a680-4064f71ba323",
+      "name": "Code_BuildOrchestratorSummary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2352,
+        288
+      ]
+    }
+  ],
+  "pinData": {
+    "Execute_Workflow_Trigger": [
+      {
+        "json": {
+          "orderId": "ORD-MODULAR-901",
+          "state": "NY",
+          "subtotal": 1200
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Execute_Workflow_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code_ValidateTaxInput",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_ValidateTaxInput": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP_ProcessPaymentCharge": {
+      "main": [
+        [
+          {
+            "node": "Code_FormatPaymentReceipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code_PrepareOrderPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_PrepareOrderPayload": {
+      "main": [
+        [
+          {
+            "node": "Execute_TaxSubWorkflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute_TaxSubWorkflow": {
+      "main": [
+        [
+          {
+            "node": "Code_MergeTaxTotals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_MergeTaxTotals": {
+      "main": [
+        [
+          {
+            "node": "Execute_PaymentSubWorkflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute_PaymentSubWorkflow": {
+      "main": [
+        [
+          {
+            "node": "Code_BuildOrchestratorSummary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0915ff7c-f05d-4011-8867-cbf244cda827",
+  "meta": {
+    "instanceId": "a03c7678428ef19ededbf912f16f7d5798ec7b9ab4c17f2a2def6a9e791e7215"
+  },
+  "nodeGroups": [],
+  "id": "vOJOoyM7iThcW6NQ",
+  "tags": []
+}
